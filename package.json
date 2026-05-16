@@ -1,0 +1,38 @@
+{
+  "name": "@nqbao/pi-alchemy",
+  "version": "0.1.0",
+  "description": "Turn raw data into insights — query, transform, and visualize data files from the terminal",
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nqbao/pi-alchemy"
+  },
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "index.ts"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.5.2-r.1",
+    "typebox": "^1.1.38"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "latest"
+  },
+  "scripts": {
+    "test": "node --experimental-transform-types --test *.test.ts"
+  }
+}
