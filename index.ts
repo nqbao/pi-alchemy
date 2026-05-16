@@ -115,6 +115,20 @@ export async function executeQuery(sql: string, maxRows: number): Promise<QueryR
   return { columns, rows, truncated, totalRows };
 }
 
+export function formatResultsToJSONL(columns: ColumnInfo[], rows: unknown[][]): string {
+  const colNames = columns.map((c) => c.name);
+  return rows
+    .map((row) => {
+      const obj: Record<string, unknown> = {};
+      colNames.forEach((name, i) => {
+        const val = row[i];
+        obj[name] = typeof val === "bigint" ? Number(val) : val;
+      });
+      return JSON.stringify(obj);
+    })
+    .join("\n");
+}
+
 export function formatResults(res: QueryResult, maxRows: number): string {
   if (res.rows.length === 0) {
     return "(no rows returned)";
@@ -264,21 +278,75 @@ export default function (pi: ExtensionAPI) {
             content: [{ type: "text" as const, text: `Too many rows: ${result.totalRows} (max: ${_maxRows})` }],
           };
         }
-        const colNames = result.columns.map((c) => c.name);
-        const lines = result.rows.map((row) => {
-          const obj: Record<string, unknown> = {};
-          colNames.forEach((name, i) => {
-            const val = row[i];
-            obj[name] = typeof val === "bigint" ? Number(val) : val;
-          });
-          return JSON.stringify(obj);
-        });
         return {
-          content: [{ type: "text" as const, text: lines.join("\n") }],
+          content: [{ type: "text" as const, text: formatResultsToJSONL(result.columns, result.rows) }],
         };
       } catch (err) {
         return {
           content: [{ type: "text" as const, text: `Query failed: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  });
+
+  // ── alchemy_tables ────────────────────────────────────────────────────────
+
+  pi.registerTool({
+    name: "alchemy_tables",
+    label: "Alchemy Tables",
+    description: "List all loaded tables and their types (VIEW or BASE TABLE).",
+    promptSnippet: "List loaded tables",
+    promptGuidelines: [
+      "Use alchemy_tables to see what tables are available before querying.",
+    ],
+    parameters: Type.Object({}),
+    async execute() {
+      try {
+        const result = await executeQuery(
+          "SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name",
+          _maxRows,
+        );
+        return {
+          content: [{ type: "text" as const, text: formatResultsToJSONL(result.columns, result.rows) || "(no tables loaded)" }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Failed to list tables: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  });
+
+  // ── alchemy_schema ────────────────────────────────────────────────────────
+
+  pi.registerTool({
+    name: "alchemy_schema",
+    label: "Alchemy Schema",
+    description: "Show column names, types, and nullability for a loaded table.",
+    promptSnippet: "Show table schema",
+    promptGuidelines: [
+      "Use alchemy_schema to inspect a table's columns and types before writing queries.",
+    ],
+    parameters: Type.Object({
+      table: Type.String({ description: "Name of the table to describe" }),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const result = await executeQuery(
+          `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = '${escapeString(params.table)}' AND table_schema = 'main' ORDER BY ordinal_position`,
+          _maxRows,
+        );
+        if (result.rows.length === 0) {
+          return {
+            content: [{ type: "text" as const, text: `Table "${params.table}" not found.` }],
+          };
+        }
+        return {
+          content: [{ type: "text" as const, text: formatResultsToJSONL(result.columns, result.rows) }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Failed to describe table: ${err instanceof Error ? err.message : String(err)}` }],
         };
       }
     },

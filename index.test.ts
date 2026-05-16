@@ -219,4 +219,34 @@ describe("DuckDB integration", () => {
     assert.equal(result.rows.length, 3);
     assert.equal(Number(result.rows[0][0]), 1);
   });
+
+  it("alchemy_tables lists loaded views", async () => {
+    await conn.run("CREATE OR REPLACE VIEW _test_list_tbl AS SELECT * FROM (VALUES (1)) AS t(v)");
+    const result = await executeQuery(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name",
+      500,
+    );
+    const names = result.rows.map((r) => r[0] as string);
+    assert.ok(names.includes("_test_list_tbl"));
+  });
+
+  it("alchemy_schema returns columns for a view", async () => {
+    await conn.run("CREATE OR REPLACE VIEW _test_schema_tbl AS SELECT * FROM (VALUES (1, 'a', true)) AS t(id, label, active)");
+    const result = await executeQuery(
+      "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '_test_schema_tbl' AND table_schema = 'main' ORDER BY ordinal_position",
+      500,
+    );
+    assert.equal(result.rows.length, 3);
+    assert.equal(result.rows[0][0], "id");
+    assert.equal(result.rows[1][0], "label");
+    assert.equal(result.rows[2][0], "active");
+  });
+
+  it("alchemy_schema returns empty for nonexistent table", async () => {
+    const result = await executeQuery(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = '_nonexistent_xyz' AND table_schema = 'main'",
+      500,
+    );
+    assert.equal(result.rows.length, 0);
+  });
 });
