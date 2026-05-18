@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 let _dbPath: string | null = null;
 let _maxRows = 500;
 let _connection: DuckDBConnection | null = null;
+let _connectionPromise: Promise<DuckDBConnection> | null = null;
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -40,13 +41,18 @@ export function loadSettings(): AlchemyConfig {
 
 export async function getConnection(): Promise<DuckDBConnection> {
   if (_connection) return _connection;
-  const instance = await DuckDBInstance.create(_dbPath ?? ":memory:");
-  _connection = await instance.connect();
-  return _connection;
+  if (_connectionPromise) return _connectionPromise;
+  _connectionPromise = (async () => {
+    const instance = await DuckDBInstance.create(_dbPath || ":memory:");
+    _connection = await instance.connect();
+    return _connection;
+  })();
+  return _connectionPromise;
 }
 
 export function setConnection(conn: DuckDBConnection | null): void {
   _connection = conn;
+  _connectionPromise = null;
 }
 
 export function setDbPath(path: string | null): void {
@@ -122,7 +128,7 @@ export function formatResultsToJSONL(columns: ColumnInfo[], rows: unknown[][]): 
       const obj: Record<string, unknown> = {};
       colNames.forEach((name, i) => {
         const val = row[i];
-        obj[name] = typeof val === "bigint" ? Number(val) : val;
+        obj[name] = typeof val === "bigint" ? String(val) : val;
       });
       return JSON.stringify(obj);
     })
@@ -189,7 +195,8 @@ export default function (pi: ExtensionAPI) {
     } else {
       _dbPath = settings.dbPath ?? null;
     }
-    _connection = null; // reset so next getConnection() creates with new dbPath
+    _connection = null;
+    _connectionPromise = null;
   });
 
   // ── alchemy_load ──────────────────────────────────────────────────────────
